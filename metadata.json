@@ -1,0 +1,6 @@
+{
+  "name": "EcoSim: Forest Dynamics",
+  "description": "A Kinetic Monte Carlo simulation of forest land cover change exploring the impact of roads, slope, and fire history.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
