@@ -3,13 +3,20 @@ import { CellType, GridCell, SimulationConfig, SimulationState } from '../types'
 
 const INITIAL_CONFIG: SimulationConfig = {
   gridSize: 40,
-  deforestationBaseRate: 0.1,
+  startYear: 2000,
+  targetYear: 2024,
+  rateFtoA: 0.0022105,
+  rateFtoB: 0.0002373,
+  rateFtoL: 0.0000565,
+  rateFtoO: 0.0001085,
+  rateFtoS: 0.00000064,
   regrowthBaseRate: 0.05,
-  fireBaseRate: 0.01,
-  roadImpactWeight: 2.0,
-  slopeImpactWeight: 0.5,
-  neighborImpactWeight: 1.5,
-  protectionFactor: 0.1,
+  alpha: 0.25,
+  beta1: 0.35,
+  beta2: 0.20,
+  gamma: 0.10,
+  delta: 0.08,
+  eta: 0.15,
 };
 
 export function useSimulation() {
@@ -63,61 +70,71 @@ export function useSimulation() {
     const events: { x: number; y: number; rate: number; nextType: CellType }[] = [];
     let totalRate = 0;
 
+    // Boundary check for target year
+    if (time >= (config.targetYear - config.startYear)) {
+      setIsRunning(false);
+      return;
+    }
+
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const cell = grid[y][x];
-        let rate = 0;
-        let nextType: CellType | null = null;
+        const pushEvent = (rate: number, nextType: CellType) => {
+          if (rate > 0) {
+            events.push({ x, y, rate, nextType });
+            totalRate += rate;
+          }
+        };
 
-        if (cell.type === CellType.FOREST) {
-          // FOREST -> DEGRADED (Deforestation)
-          const roadImpact = Math.exp(-cell.distToRoad * 5) * config.roadImpactWeight;
-          const slopeImpact = (1 - cell.slope) * config.slopeImpactWeight;
-          
-          // Neighbor impact (nearby forest loss)
-          let neighborLoss = 0;
-          const neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
-          neighbors.forEach(([dx, dy]) => {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
-               if (grid[ny][nx].type !== CellType.FOREST) neighborLoss++;
-            }
-          });
-          const neighborImpact = (neighborLoss / 4) * config.neighborImpactWeight;
-          const protectionImpact = cell.isProtected ? config.protectionFactor : 1;
+        // Neighbor counts for multipliers
+        let nA = 0; // Ag
+        let nB = 0; // Burned
+        let nL = 0; // Logged
+        let nO = 0; // Other
+        let nS = 0; // Settlement
+        
+        const neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
+        neighbors.forEach(([dx, dy]) => {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+             const type = grid[ny][nx].type;
+             if (type === CellType.PERMANENT_AGRICULTURE) nA++;
+             else if (type === CellType.BURNED) nB++;
+             else if (type === CellType.LOGGED_DEGRADED) nL++;
+             else if (type === CellType.OTHER_TEMP_DISTURBANCE) nO++;
+             else if (type === CellType.SETTLEMENT_INFRASTRUCTURE) nS++;
+          }
+        });
 
-          rate = config.deforestationBaseRate * (1 + roadImpact + neighborImpact + slopeImpact) * protectionImpact;
-          nextType = CellType.DEGRADED;
-          
-          // FIRE event
-          const fireRate = config.fireBaseRate * (neighborLoss * 0.5 + 1);
-          events.push({ x, y, rate: fireRate, nextType: CellType.BURNT });
-          totalRate += fireRate;
+        if (cell.type === CellType.FORESTED) {
+          // Forested -> Ag, Burn, Logged, Disturbance, Settlement
+          pushEvent(config.rateFtoA * (1 + config.alpha * nA), CellType.PERMANENT_AGRICULTURE);
+          pushEvent(config.rateFtoB * (1 + config.beta1 * nB + config.beta2 * nL), CellType.BURNED);
+          pushEvent(config.rateFtoL * (1 + config.gamma * nL), CellType.LOGGED_DEGRADED);
+          pushEvent(config.rateFtoO * (1 + config.delta * nO), CellType.OTHER_TEMP_DISTURBANCE);
+          pushEvent(config.rateFtoS * (1 + config.eta * nS), CellType.SETTLEMENT_INFRASTRUCTURE);
 
-        } else if (cell.type === CellType.DEGRADED) {
-          // DEGRADED -> RESTORING
-          rate = config.regrowthBaseRate;
-          nextType = CellType.RESTORING;
-        } else if (cell.type === CellType.RESTORING) {
-          // RESTORING -> FOREST
-          rate = config.regrowthBaseRate * 2;
-          nextType = CellType.FOREST;
-          
-          // FIRE event
-          const fireRate = config.fireBaseRate * 0.5;
-          events.push({ x, y, rate: fireRate, nextType: CellType.BURNT });
-          totalRate += fireRate;
-        } else if (cell.type === CellType.BURNT) {
-          // BURNT -> DEGRADED
-          rate = config.regrowthBaseRate * 0.5;
-          nextType = CellType.DEGRADED;
+        } else if (cell.type === CellType.BURNED) {
+          // Burned -> Forested, Ag, Disturbance
+          pushEvent(config.regrowthBaseRate, CellType.FORESTED);
+          pushEvent(config.rateFtoA * 0.5, CellType.PERMANENT_AGRICULTURE);
+          pushEvent(config.rateFtoO * 0.2, CellType.OTHER_TEMP_DISTURBANCE);
+
+        } else if (cell.type === CellType.LOGGED_DEGRADED) {
+          // Logged -> Forested, Ag, Burn, Disturbance
+          pushEvent(config.regrowthBaseRate * 0.7, CellType.FORESTED);
+          pushEvent(config.rateFtoA * 0.8, CellType.PERMANENT_AGRICULTURE);
+          pushEvent(config.rateFtoB * 1.5, CellType.BURNED);
+          pushEvent(config.rateFtoO * 0.3, CellType.OTHER_TEMP_DISTURBANCE);
+
+        } else if (cell.type === CellType.OTHER_TEMP_DISTURBANCE) {
+          // Disturbance -> Forested, Ag, Burn
+          pushEvent(config.regrowthBaseRate * 1.2, CellType.FORESTED);
+          pushEvent(config.rateFtoA * 0.4, CellType.PERMANENT_AGRICULTURE);
+          pushEvent(config.rateFtoB, CellType.BURNED);
         }
-
-        if (rate > 0 && nextType) {
-          events.push({ x, y, rate, nextType });
-          totalRate += rate;
-        }
+        // Agriculture and Settlement are sinks (no transitions out)
       }
     }
 
@@ -145,13 +162,13 @@ export function useSimulation() {
       newGrid[selectedEvent.y][selectedEvent.x] = {
         ...cell,
         type: selectedEvent.nextType,
-        lastFireTime: selectedEvent.nextType === CellType.BURNT ? time + dt : cell.lastFireTime,
+        lastFireTime: selectedEvent.nextType === CellType.BURNED ? time + dt : cell.lastFireTime,
       };
 
       // Calculate statistics
       let forestCount = 0;
       newGrid.forEach(row => row.forEach(c => {
-        if (c.type === CellType.FOREST) forestCount++;
+        if (c.type === CellType.FORESTED) forestCount++;
       }));
       const percentage = (forestCount / (size * size)) * 100;
 
@@ -168,9 +185,6 @@ export function useSimulation() {
     let intervalId: any;
     if (isRunning) {
       intervalId = setInterval(() => {
-        // Run multiple steps per interval to speed up the visual simulation if needed
-        // but KMC is event-based. We'll do 1 step per frame approximate.
-        // Actually, we can batch steps if dt is very small.
         for (let i = 0; i < 5; i++) {
           step();
         }
@@ -190,36 +204,27 @@ export function useSimulation() {
 
 function generateInitialGrid(size: number): GridCell[][] {
   const grid: GridCell[][] = [];
-  
-  // Roads: simplified as one or two lines
-  const hasRoad = (x: number, y: number) => {
-    return Math.abs(x - size * 0.3) < 1 || Math.abs(y - size * 0.7) < 1;
-  };
 
   for (let y = 0; y < size; y++) {
     const row: GridCell[] = [];
     for (let x = 0; x < size; x++) {
-      // Distance to nearest road
-      const dist1 = Math.abs(x - size * 0.3) / size;
-      const dist2 = Math.abs(y - size * 0.7) / size;
-      const distToRoad = Math.min(dist1, dist2);
+      // Set a neutral distance to road (no specific road spine)
+      const distToRoad = 1.0;
 
-      // Slope: some pattern
-      const slope = (Math.sin(x * 0.2) * Math.cos(y * 0.2) + 1) / 2;
+      // Slope
+      const slope = (Math.sin(x * 0.3) * Math.cos(y * 0.3) + 1) / 2;
 
-      // Protection: central area or specific block
-      const isProtected = x > size * 0.5 && y < size * 0.5;
+      // Protection: South-East block (strictly programmatic, removed visual highlight later)
+      const isProtected = x > size * 0.6 && y > size * 0.6;
 
+      let type = CellType.FORESTED;
+      
       row.push({
         id: `${x}-${y}`,
         x,
         y,
-        type: CellType.FOREST,
-        slope,
-        distToRoad,
-        isProtected,
+        type,
         lastFireTime: -1,
-        fireProbability: 0.01,
       });
     }
     grid.push(row);

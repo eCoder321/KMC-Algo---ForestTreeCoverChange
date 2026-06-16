@@ -1,8 +1,10 @@
 export enum CellType {
-  FOREST = 'FOREST',
-  DEGRADED = 'DEGRADED',
-  RESTORING = 'RESTORING',
-  BURNT = 'BURNT',
+  FORESTED = 'FORESTED',
+  PERMANENT_AGRICULTURE = 'PERMANENT_AGRICULTURE',
+  BURNED = 'BURNED',
+  LOGGED_DEGRADED = 'LOGGED_DEGRADED',
+  OTHER_TEMP_DISTURBANCE = 'OTHER_TEMP_DISTURBANCE',
+  SETTLEMENT_INFRASTRUCTURE = 'SETTLEMENT_INFRASTRUCTURE',
 }
 
 export interface GridCell {
@@ -10,11 +12,7 @@ export interface GridCell {
   x: number;
   y: number;
   type: CellType;
-  slope: number; // 0 to 1
-  distToRoad: number; // Normalized 0 to 1
-  isProtected: boolean;
   lastFireTime: number;
-  fireProbability: number;
 }
 
 export interface SimulationState {
@@ -26,11 +24,21 @@ export interface SimulationState {
 
 export interface SimulationConfig {
   gridSize: number;
-  deforestationBaseRate: number;
+  startYear: number;
+  targetYear: number;
+  // Base rates (per year)
+  rateFtoA: number; // Forested -> AG
+  rateFtoB: number; // Forested -> Burned
+  rateFtoL: number; // Forested -> Logged
+  rateFtoO: number; // Forested -> Other
+  rateFtoS: number; // Forested -> Settlement
   regrowthBaseRate: number;
-  fireBaseRate: number;
-  roadImpactWeight: number;
-  slopeImpactWeight: number;
-  neighborImpactWeight: number;
-  protectionFactor: number; // Multiplier (e.g., 0.1 for 90% reduction)
+
+  // Local Multipliers (Neighborhood Sensitivity)
+  alpha: number; // Ag pressure
+  beta1: number; // Fire spread
+  beta2: number; // Logged susceptibility to fire
+  gamma: number; // Logging pressure
+  delta: number; // Other dist pressure
+  eta: number;   // Settlement pressure
 }

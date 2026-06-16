@@ -7,10 +7,12 @@ interface VisualizerProps {
 }
 
 const COLORS = {
-  [CellType.FOREST]: '#064e3b', // emerald-900
-  [CellType.DEGRADED]: '#d6d3d1', // stone-300
-  [CellType.RESTORING]: '#34d399', // emerald-400
-  [CellType.BURNT]: '#fdba74', // orange-300
+  [CellType.FORESTED]: '#064e3b', // emerald-900
+  [CellType.PERMANENT_AGRICULTURE]: '#d97706', // amber-600
+  [CellType.BURNED]: '#7c2d12', // orange-900 (scorched)
+  [CellType.LOGGED_DEGRADED]: '#4d7c0f', // lime-900 (muted olive)
+  [CellType.OTHER_TEMP_DISTURBANCE]: '#a8a29e', // stone-400
+  [CellType.SETTLEMENT_INFRASTRUCTURE]: '#1c1917', // stone-900 (industrial)
 };
 
 export const Visualizer: React.FC<VisualizerProps> = ({ grid, size }) => {
@@ -32,18 +34,10 @@ export const Visualizer: React.FC<VisualizerProps> = ({ grid, size }) => {
         ctx.fillStyle = COLORS[cell.type];
         ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         
-        // Road infrastructure
-        if (cell.distToRoad < 0.015) {
-          ctx.fillStyle = '#78716c'; // stone-600
-          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-        }
-        
-        // Protection buffer
-        if (cell.isProtected) {
-          ctx.strokeStyle = 'rgba(16, 185, 129, 0.2)'; // emerald-500
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x * cellSize + 0.5, y * cellSize + 0.5, cellSize - 1, cellSize - 1);
-        }
+        // Consistent subtle light grid for all cells
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
       }
     }
   }, [grid, size]);
