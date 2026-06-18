@@ -20,6 +20,7 @@ const INITIAL_CONFIG: SimulationConfig = {
 };
 
 export function useSimulation() {
+  //these initialize the starting state
   const [state, setState] = useState<SimulationState>(() => {
     const grid = generateInitialGrid(INITIAL_CONFIG.gridSize);
     return {
@@ -120,7 +121,8 @@ export function useSimulation() {
         } else if (cell.type === CellType.BURNED) {
           // Burned -> Forested, Ag, Disturbance
           pushEvent(config.regrowthBaseRate, CellType.FORESTED);
-          pushEvent(config.rateFtoA * 0.5, CellType.PERMANENT_AGRICULTURE);
+          //just using heuristics - we don't have a set rate of burned to Perm Agriculture or Other temp disturbance
+          pushEvent(config.rateFtoA * 0.5, CellType.PERMANENT_AGRICULTURE); 
           pushEvent(config.rateFtoO * 0.2, CellType.OTHER_TEMP_DISTURBANCE);
 
         } else if (cell.type === CellType.LOGGED_DEGRADED) {
@@ -140,16 +142,18 @@ export function useSimulation() {
       }
     }
 
+    //totalRate == 0 means nothing happened this step
     if (totalRate === 0) return;
 
     // 2. Determine time increment dt
-    const dt = -Math.log(Math.random()) / totalRate;
+    const dt = Math.log( 1 / (1 - Math.random())) / totalRate;
 
     // 3. Select which event occurs
     const r = Math.random() * totalRate;
     let cumulativeRate = 0;
     let selectedEvent = null;
 
+    //O(N) approach - we could use BinarySearch to make this cost logN instead of just looping through. future iteration
     for (const event of events) {
       cumulativeRate += event.rate;
       if (r <= cumulativeRate) {
@@ -226,15 +230,6 @@ function generateInitialGrid(size: number): GridCell[][] {
   for (let y = 0; y < size; y++) {
     const row: GridCell[] = [];
     for (let x = 0; x < size; x++) {
-      // Set a neutral distance to road (no specific road spine)
-      const distToRoad = 1.0;
-
-      // Slope
-      const slope = (Math.sin(x * 0.3) * Math.cos(y * 0.3) + 1) / 2;
-
-      // Protection: South-East block (strictly programmatic, removed visual highlight later)
-      const isProtected = x > size * 0.6 && y > size * 0.6;
-
       let type = CellType.FORESTED;
       
       row.push({
