@@ -19,6 +19,7 @@ export interface SimulationState {
   grid: GridCell[][];
   time: number;
   forestCoverHistory: { time: number; percentage: number }[];
+  annualHistory: { year: number; percentage: number }[];
   config: SimulationConfig;
 }
 

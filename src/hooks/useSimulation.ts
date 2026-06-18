@@ -5,12 +5,12 @@ const INITIAL_CONFIG: SimulationConfig = {
   gridSize: 40,
   startYear: 2000,
   targetYear: 2024,
-  rateFtoA: 0.0022105,
-  rateFtoB: 0.0002373,
-  rateFtoL: 0.0000565,
-  rateFtoO: 0.0001085,
-  rateFtoS: 0.00000064,
-  regrowthBaseRate: 0.05,
+  rateFtoA: 0.001360306,
+  rateFtoB: 0.0000707808,
+  rateFtoL: 0.0000304576,
+  rateFtoO: 0.000110815,
+  rateFtoS: 0.000000844248,
+  regrowthBaseRate: 0.0000651,
   alpha: 0.25,
   beta1: 0.35,
   beta2: 0.20,
@@ -26,6 +26,7 @@ export function useSimulation() {
       grid,
       time: 0,
       forestCoverHistory: [{ time: 0, percentage: 100 }],
+      annualHistory: [{ year: INITIAL_CONFIG.startYear, percentage: 100 }],
       config: INITIAL_CONFIG,
     };
   });
@@ -57,6 +58,7 @@ export function useSimulation() {
       grid,
       time: 0,
       forestCoverHistory: [{ time: 0, percentage: 100 }],
+      annualHistory: [{ year: stateRef.current.config.startYear, percentage: 100 }],
       config: stateRef.current.config,
     });
   }, []);
@@ -172,12 +174,28 @@ export function useSimulation() {
       }));
       const percentage = (forestCount / (size * size)) * 100;
 
-      setState(prev => ({
-        ...prev,
-        grid: newGrid,
-        time: prev.time + dt,
-        forestCoverHistory: [...prev.forestCoverHistory, { time: prev.time + dt, percentage }].slice(-100),
-      }));
+      setState(prev => {
+        const nextTime = prev.time + dt;
+        const oldYear = Math.floor(prev.config.startYear + prev.time);
+        const newYear = Math.floor(prev.config.startYear + nextTime);
+        const updatedAnnual = [...prev.annualHistory];
+
+        if (newYear > oldYear) {
+          for (let y = oldYear + 1; y <= newYear; y++) {
+            if (!updatedAnnual.some(item => item.year === y)) {
+              updatedAnnual.push({ year: y, percentage });
+            }
+          }
+        }
+
+        return {
+          ...prev,
+          grid: newGrid,
+          time: nextTime,
+          forestCoverHistory: [...prev.forestCoverHistory, { time: nextTime, percentage }].slice(-100),
+          annualHistory: updatedAnnual,
+        };
+      });
     }
   }, []);
 
