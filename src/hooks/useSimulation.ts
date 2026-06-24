@@ -10,13 +10,14 @@ const INITIAL_CONFIG: SimulationConfig = {
   rateFtoL: 0.0000304576,
   rateFtoO: 0.000110815,
   rateFtoS: 0.000000844248,
-  regrowthBaseRate: 0.0000651,
+  regrowthBaseRate: 0.0000685,
   alpha: 0.25,
   beta1: 0.35,
-  beta2: 0.20,
   gamma: 0.10,
   delta: 0.08,
   eta: 0.15,
+  kappa1: 0.15,
+  kappa2: 0.15
 };
 
 export function useSimulation() {
@@ -95,6 +96,7 @@ export function useSimulation() {
         let nL = 0; // Logged
         let nO = 0; // Other
         let nS = 0; // Settlement
+        let nF = 0; //Forested
         
         const neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
         neighbors.forEach(([dx, dy]) => {
@@ -107,34 +109,35 @@ export function useSimulation() {
              else if (type === CellType.LOGGED_DEGRADED) nL++;
              else if (type === CellType.OTHER_TEMP_DISTURBANCE) nO++;
              else if (type === CellType.SETTLEMENT_INFRASTRUCTURE) nS++;
+             else if (type === CellType.FORESTED) nF++;
           }
         });
 
         if (cell.type === CellType.FORESTED) {
           // Forested -> Ag, Burn, Logged, Disturbance, Settlement
           pushEvent(config.rateFtoA * (1 + config.alpha * nA), CellType.PERMANENT_AGRICULTURE);
-          pushEvent(config.rateFtoB * (1 + config.beta1 * nB + config.beta2 * nL), CellType.BURNED);
+          pushEvent(config.rateFtoB * (1 + config.beta1 * nB), CellType.BURNED);
           pushEvent(config.rateFtoL * (1 + config.gamma * nL), CellType.LOGGED_DEGRADED);
           pushEvent(config.rateFtoO * (1 + config.delta * nO), CellType.OTHER_TEMP_DISTURBANCE);
           pushEvent(config.rateFtoS * (1 + config.eta * nS), CellType.SETTLEMENT_INFRASTRUCTURE);
 
         } else if (cell.type === CellType.BURNED) {
           // Burned -> Forested, Ag, Disturbance
-          pushEvent(config.regrowthBaseRate, CellType.FORESTED);
+          pushEvent(config.regrowthBaseRate * (1 + config.kappa1 * nF + config.kappa2 * nA), CellType.FORESTED);
           //just using heuristics - we don't have a set rate of burned to Perm Agriculture or Other temp disturbance
           pushEvent(config.rateFtoA * 0.5, CellType.PERMANENT_AGRICULTURE); 
           pushEvent(config.rateFtoO * 0.2, CellType.OTHER_TEMP_DISTURBANCE);
 
         } else if (cell.type === CellType.LOGGED_DEGRADED) {
           // Logged -> Forested, Ag, Burn, Disturbance
-          pushEvent(config.regrowthBaseRate * 0.7, CellType.FORESTED);
+          pushEvent(config.regrowthBaseRate * (1 + config.kappa1 * nF + config.kappa2 * nA), CellType.FORESTED);
           pushEvent(config.rateFtoA * 0.8, CellType.PERMANENT_AGRICULTURE);
           pushEvent(config.rateFtoB * 1.5, CellType.BURNED);
           pushEvent(config.rateFtoO * 0.3, CellType.OTHER_TEMP_DISTURBANCE);
 
         } else if (cell.type === CellType.OTHER_TEMP_DISTURBANCE) {
           // Disturbance -> Forested, Ag, Burn
-          pushEvent(config.regrowthBaseRate * 1.2, CellType.FORESTED);
+          pushEvent(config.regrowthBaseRate * (1 + config.kappa1 * nF + config.kappa2 * nA), CellType.FORESTED);
           pushEvent(config.rateFtoA * 0.4, CellType.PERMANENT_AGRICULTURE);
           pushEvent(config.rateFtoB, CellType.BURNED);
         }
@@ -154,6 +157,7 @@ export function useSimulation() {
     let selectedEvent = null;
 
     //O(N) approach - we could use BinarySearch to make this cost logN instead of just looping through. future iteration
+    //yeah, but'd require refactoring (we'd have to include the cumulative rate as we're adding each possible transition to the list, in order to do this)
     for (const event of events) {
       cumulativeRate += event.rate;
       if (r <= cumulativeRate) {
@@ -168,7 +172,6 @@ export function useSimulation() {
       newGrid[selectedEvent.y][selectedEvent.x] = {
         ...cell,
         type: selectedEvent.nextType,
-        lastFireTime: selectedEvent.nextType === CellType.BURNED ? time + dt : cell.lastFireTime,
       };
 
       // Calculate statistics
@@ -236,8 +239,7 @@ function generateInitialGrid(size: number): GridCell[][] {
         id: `${x}-${y}`,
         x,
         y,
-        type,
-        lastFireTime: -1,
+        type
       });
     }
     grid.push(row);

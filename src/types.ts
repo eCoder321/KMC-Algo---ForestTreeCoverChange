@@ -11,8 +11,7 @@ export interface GridCell {
   id: string;
   x: number;
   y: number;
-  type: CellType;
-  lastFireTime: number;
+  type: CellType
 }
 
 export interface SimulationState {
@@ -38,8 +37,9 @@ export interface SimulationConfig {
   // Local Multipliers (Neighborhood Sensitivity)
   alpha: number; // Ag pressure
   beta1: number; // Fire spread
-  beta2: number; // Logged susceptibility to fire
   gamma: number; // Logging pressure
   delta: number; // Other dist pressure
   eta: number;   // Settlement pressure
+  kappa1: number; // Forest pressure on temp disturbance cells
+  kappa2: number; // Permanent Ag pressure on temp disturbance cells
 }

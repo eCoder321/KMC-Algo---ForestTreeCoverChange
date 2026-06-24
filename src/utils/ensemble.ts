@@ -65,6 +65,7 @@ export function runSingleSimulation(config: SimulationConfig): EnsembleRunResult
         let nL = 0;
         let nO = 0;
         let nS = 0;
+        let nF = 0;
 
         for (let i = 0; i < neighbors.length; i++) {
           const nx = x + neighbors[i][0];
@@ -76,26 +77,27 @@ export function runSingleSimulation(config: SimulationConfig): EnsembleRunResult
             else if (nt === CellType.LOGGED_DEGRADED) nL++;
             else if (nt === CellType.OTHER_TEMP_DISTURBANCE) nO++;
             else if (nt === CellType.SETTLEMENT_INFRASTRUCTURE) nS++;
+            else if (nt === CellType.FORESTED) nF++;
           }
         }
 
         if (type === CellType.FORESTED) {
           pushEvent(config.rateFtoA * (1 + config.alpha * nA), CellType.PERMANENT_AGRICULTURE);
-          pushEvent(config.rateFtoB * (1 + config.beta1 * nB + config.beta2 * nL), CellType.BURNED);
+          pushEvent(config.rateFtoB * (1 + config.beta1 * nB), CellType.BURNED);
           pushEvent(config.rateFtoL * (1 + config.gamma * nL), CellType.LOGGED_DEGRADED);
           pushEvent(config.rateFtoO * (1 + config.delta * nO), CellType.OTHER_TEMP_DISTURBANCE);
           pushEvent(config.rateFtoS * (1 + config.eta * nS), CellType.SETTLEMENT_INFRASTRUCTURE);
         } else if (type === CellType.BURNED) {
-          pushEvent(config.regrowthBaseRate, CellType.FORESTED);
+          pushEvent(config.regrowthBaseRate * (1 + config.kappa1 * nF + config.kappa2 * nA), CellType.FORESTED);
           pushEvent(config.rateFtoA * 0.5, CellType.PERMANENT_AGRICULTURE);
           pushEvent(config.rateFtoO * 0.2, CellType.OTHER_TEMP_DISTURBANCE);
         } else if (type === CellType.LOGGED_DEGRADED) {
-          pushEvent(config.regrowthBaseRate * 0.7, CellType.FORESTED);
+          pushEvent(config.regrowthBaseRate * (1 + config.kappa1 * nF + config.kappa2 * nA) * 0.7, CellType.FORESTED);
           pushEvent(config.rateFtoA * 0.8, CellType.PERMANENT_AGRICULTURE);
           pushEvent(config.rateFtoB * 1.5, CellType.BURNED);
           pushEvent(config.rateFtoO * 0.3, CellType.OTHER_TEMP_DISTURBANCE);
         } else if (type === CellType.OTHER_TEMP_DISTURBANCE) {
-          pushEvent(config.regrowthBaseRate * 1.2, CellType.FORESTED);
+          pushEvent(config.regrowthBaseRate * (1 + config.kappa1 * nF + config.kappa2 * nA) * 1.2, CellType.FORESTED);
           pushEvent(config.rateFtoA * 0.4, CellType.PERMANENT_AGRICULTURE);
           pushEvent(config.rateFtoB, CellType.BURNED);
         }
@@ -176,6 +178,8 @@ export function runSingleSimulation(config: SimulationConfig): EnsembleRunResult
     }
   }
 
+  //this currently saves the first time a year is entered into, when we jump into a new year. it doesn't track the end-results of the year
+  //doesn't really matter, cause we're using this to track history. the final calculations use the true ending pct
   const endingPct = (finalForested / (size * size)) * 100;
   for (let y = lastRecordedYear + 1; y <= config.targetYear; y++) {
     annualHistory.push({ year: y, percentage: endingPct });

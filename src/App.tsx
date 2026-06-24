@@ -341,15 +341,6 @@ export default function App() {
                 tooltip="Sensitivity of forest to spread from adjacent burned areas (fire contagion effect)."
               />
               <InputGroup 
-                label="Burn Vulnerability (β2)" 
-                icon={<Flame className="w-3 h-3" />}
-                value={state.config.beta2}
-                onChange={(v) => updateConfig({ beta2: v })}
-                min={0} max={2} step={0.01}
-                accent="orange-600"
-                tooltip="Increased fire risk for primary forest when bordered by logged or degraded patches."
-              />
-              <InputGroup 
                 label="Logging Pressure (γ)" 
                 icon={<Trees className="w-3 h-3" />}
                 value={state.config.gamma}
@@ -372,6 +363,22 @@ export default function App() {
                 onChange={(v) => updateConfig({ eta: v })}
                 min={0} max={2} step={0.01}
                 tooltip="Incentive for infrastructure expansion near existing settlements and built environments."
+              />
+              <InputGroup 
+                label="Forest on regrowth (κ1)" 
+                icon={<Route className="w-3 h-3" />}
+                value={state.config.kappa1}
+                onChange={(v) => updateConfig({ kappa1: v })}
+                min={0} max={2} step={0.01}
+                tooltip="Incentive for how much nearby forested cells contribute to the regrowth of a temporarily disturbed cell (burned, logged, other temp. disturbance)."
+              />
+              <InputGroup 
+                label="Ag. on regrowth (κ2)" 
+                icon={<Route className="w-3 h-3" />}
+                value={state.config.kappa2}
+                onChange={(v) => updateConfig({ kappa2: v })}
+                min={0} max={2} step={0.01}
+                tooltip="Incentive for how much nearby permanent agriculture cells hinder the regrowth of a temporarily disturbed cell (burned, logged, other temp. disturbance)."
               />
             </div>
           </section>
@@ -396,14 +403,6 @@ export default function App() {
               />
             </div>
           </section>
-
-          <div className="mt-auto">
-            <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
-              <p className="text-[11px] leading-relaxed text-stone-500 italic">
-                "Transitions now follow eligibility constraints for South Amazon: Forest loss drives degradation toward agriculture, while recovery pathways are limited by soil depletion."
-              </p>
-            </div>
-          </div>
         </aside>
 
         {/* Main Content Area */}
@@ -484,7 +483,7 @@ export default function App() {
             <section className="space-y-2">
               <span className="text-[10px] text-stone-400 font-bold uppercase tracking-tight">Fire Dynamics</span>
               <div className="bg-stone-50 p-3 rounded-lg border border-stone-100 font-mono text-[11px]">
-                <BlockMath math={`\\lambda_{F \\to B} = ${state.config.rateFtoB.toFixed(5)} \\times (1 + ${state.config.beta1} \\cdot n_B + ${state.config.beta2} \\cdot n_L)`} />
+                <BlockMath math={`\\lambda_{F \\to B} = ${state.config.rateFtoB.toFixed(5)} \\times (1 + ${state.config.beta1} \\cdot n_B)`} />
               </div>
             </section>
 
