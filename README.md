@@ -1,4 +1,4 @@
-# EcoSim: Forest Dynamics - Toy Version
+# EcoSim: Forest Dynamics
 
 EcoSim is a spatial-stochastic simulation tool designed to explore the complex dynamics of forest land-cover change. It utilizes a **Kinetic Monte Carlo (KMC)** algorithm to model transitions between different ecological states, driven by environmental determinants like road proximity, terrain topography, and fire history.
 
