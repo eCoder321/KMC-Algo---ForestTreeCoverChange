@@ -2,20 +2,17 @@ import copy
 import math
 import random
 from statistics import mean
-
-from data_types import DynamicRate, KMCSimulationTracker, KMCPiecewiseConstsConfig, CellType, LocalMultipliers
+from data_types import KMCSimulationTracker, KMCPiecewiseConstsConfig, CellType, LocalMultipliers
 from rf_kmc_fixed_rates import generate_initial_grid
 from datamanip import get_piecewise_constants_per_year
-from generate_rate_functions import build_dynamic_rate_models
 from shared import create_local_multipliers, REGROWTH_RATE
 
-
-def run_kmc_simulation(simulation_tracker: KMCSimulationTracker, numSimulationRuns: int = 1) -> tuple[dict[str, float], list[float]]:
+def run_kmc_simulation(simulation_tracker: KMCSimulationTracker, numSimulationRuns: int=1) -> tuple[dict[str, float], list[float]]:
     aggregated_runs: list[KMCSimulationTracker] = []
     for _ in range(numSimulationRuns):
-        local_simulation_tracker = copy.deepcopy(simulation_tracker)
-        rf_kmc_dynamic_single_run(local_simulation_tracker)
-        aggregated_runs.append(local_simulation_tracker)
+      local_simulation_tracker = copy.deepcopy(simulation_tracker)
+      rf_kmc_fixed_single_run(local_simulation_tracker)
+      aggregated_runs.append(local_simulation_tracker)
     avg_stats = {
         "forestPctLeft": mean(x.forestPctLeft for x in aggregated_runs),
         "toForested": mean(x.toForested for x in aggregated_runs),
@@ -23,51 +20,36 @@ def run_kmc_simulation(simulation_tracker: KMCSimulationTracker, numSimulationRu
         "toBurned": mean(x.toBurned for x in aggregated_runs),
         "toOther": mean(x.toOther for x in aggregated_runs),
         "toLogged": mean(x.toLogged for x in aggregated_runs),
-        "toSettlement": mean(x.toSettlement for x in aggregated_runs),
+        "toSettlement": mean(x.toSettlement for x in aggregated_runs)
     }
     forestPctHistory = [x.forestPctLeft for x in aggregated_runs]
     return (avg_stats, forestPctHistory)
 
 
-def rf_kmc_dynamic_single_run(simulation_tracker: KMCSimulationTracker) -> KMCSimulationTracker:
-    """
+def rf_kmc_fixed_single_run(simulation_tracker: KMCSimulationTracker) -> KMCSimulationTracker:
+  """
     - runs KMC till target year
-    """
-    grid = generate_initial_grid(size=simulation_tracker.gridSize)
-    piecewise_event_rates = get_piecewise_constants_per_year(simulation_tracker.trainingMaxYear)
-    dynamic_event_rates = build_dynamic_rate_models(piecewise_event_rates)
-    local_multipliers = create_local_multipliers()
-    while simulation_tracker.currentYear <= simulation_tracker.targetYear:  # <= bc we want the result at the end of the target year (in case there are multiple events in the target year)
-        progressed = rf_kmc_dynamic_single_event(piecewise_event_rates, dynamic_event_rates, local_multipliers, simulation_tracker, grid)
-        if not progressed:
-            break
-    return simulation_tracker
+  """
+  grid = generate_initial_grid(size=simulation_tracker.gridSize)
+  piecewise_event_rates = get_piecewise_constants_per_year()
+  local_multipliers = create_local_multipliers()
+  while simulation_tracker.currentYear <= simulation_tracker.targetYear: #<= bc we want the result at the end of the target year (in case there are multiple events in the target year)
+    progressed = rf_kmc_fixed_single_event(piecewise_event_rates, local_multipliers, simulation_tracker, grid)
+    if not progressed:
+        break
+  return simulation_tracker
 
 
-def rf_kmc_dynamic_single_event(
-    config: KMCPiecewiseConstsConfig,
-    dynamic_rates: dict[str, DynamicRate] | None,
-    local_multipliers: LocalMultipliers,
-    simulation_tracker: KMCSimulationTracker,
-    grid: list[list[dict[str, int | CellType | str]]],
-) -> bool:
+def rf_kmc_fixed_single_event(config: KMCPiecewiseConstsConfig, local_multipliers: LocalMultipliers, simulation_tracker: KMCSimulationTracker, grid: list[list[dict[str, int | CellType | str]]]) -> bool:
     """
     single run KMC - i.e. 1 event
     """
     size = simulation_tracker.gridSize
-    cell_pct = (1 / (size * size) * 100)
+    cell_pct = (1/(size*size) * 100)
     events = []
     total_rate = 0.0
-    if simulation_tracker.currentYear == 0:
-        simulation_tracker.currentYear = simulation_tracker.startingYear
-
-    if dynamic_rates is None:
-        dynamic_rates = build_dynamic_rate_models(config)
-
-    def get_rate_for_event(event_name: str) -> float:
-        if dynamic_rates is not None and event_name in dynamic_rates:
-            return float(dynamic_rates[event_name].at_year(float(simulation_tracker.currentYear)))
-        return float(config[event_name][int(simulation_tracker.currentTime)])
+    if simulation_tracker.currentYear == 0: simulation_tracker.currentYear = simulation_tracker.startingYear
+    current_year_index = int(simulation_tracker.currentTime)
 
     for y in range(size):
         for x in range(size):
@@ -85,7 +67,7 @@ def rf_kmc_dynamic_single_event(
             for dx, dy in neighbors:
                 nx = x + dx
                 ny = y + dy
-                if 0 <= nx < size and 0 <= ny < size:
+                if (0 <= nx < size and 0 <= ny < size):
                     neighbor_type = grid[ny][nx]["type"]
                     match neighbor_type:
                         case CellType.PERMANENT_AGRICULTURE:
@@ -103,11 +85,11 @@ def rf_kmc_dynamic_single_event(
 
             cell_type = cell["type"]
             if cell_type == CellType.FORESTED:
-                push_event(get_rate_for_event(CellType.PERMANENT_AGRICULTURE.value) * (1 + local_multipliers.alpha * nA), CellType.PERMANENT_AGRICULTURE)
-                push_event(get_rate_for_event(CellType.BURNED.value) * (1 + local_multipliers.beta1 * nB), CellType.BURNED)
-                push_event(get_rate_for_event(CellType.LOGGED_DEGRADED.value) * (1 + local_multipliers.gamma * nL), CellType.LOGGED_DEGRADED)
-                push_event(get_rate_for_event(CellType.OTHER_TEMP_DISTURBANCE.value) * (1 + local_multipliers.delta * nO), CellType.OTHER_TEMP_DISTURBANCE)
-                push_event(get_rate_for_event(CellType.SETTLEMENT_INFRASTRUCTURE.value) * (1 + local_multipliers.eta * nS), CellType.SETTLEMENT_INFRASTRUCTURE)
+                push_event(config[CellType.PERMANENT_AGRICULTURE.value][current_year_index] * (1 + local_multipliers.alpha * nA), CellType.PERMANENT_AGRICULTURE)
+                push_event(config[CellType.BURNED.value][current_year_index] * (1 + local_multipliers.beta1 * nB), CellType.BURNED)
+                push_event(config[CellType.LOGGED_DEGRADED.value][current_year_index] * (1 + local_multipliers.gamma * nL), CellType.LOGGED_DEGRADED)
+                push_event(config[CellType.OTHER_TEMP_DISTURBANCE.value][current_year_index] * (1 + local_multipliers.delta * nO), CellType.OTHER_TEMP_DISTURBANCE)
+                push_event(config[CellType.SETTLEMENT_INFRASTRUCTURE.value][current_year_index] * (1 + local_multipliers.eta * nS), CellType.SETTLEMENT_INFRASTRUCTURE)
 
             elif cell_type == CellType.BURNED:
                 push_event(
@@ -115,8 +97,8 @@ def rf_kmc_dynamic_single_event(
                     * (1 + local_multipliers.kappa1 * nF - local_multipliers.kappa2 * nA),
                     CellType.FORESTED,
                 )
-                push_event(get_rate_for_event(CellType.PERMANENT_AGRICULTURE.value) * local_multipliers.multiplierBtoA, CellType.PERMANENT_AGRICULTURE)
-                push_event(get_rate_for_event(CellType.OTHER_TEMP_DISTURBANCE.value) * local_multipliers.multiplierBtoO, CellType.OTHER_TEMP_DISTURBANCE)
+                push_event(config[CellType.PERMANENT_AGRICULTURE.value][current_year_index] * local_multipliers.multiplierBtoA, CellType.PERMANENT_AGRICULTURE)
+                push_event(config[CellType.OTHER_TEMP_DISTURBANCE.value][current_year_index] * local_multipliers.multiplierBtoO, CellType.OTHER_TEMP_DISTURBANCE)
 
             elif cell_type == CellType.LOGGED_DEGRADED:
                 push_event(
@@ -124,9 +106,9 @@ def rf_kmc_dynamic_single_event(
                     * (1 + local_multipliers.kappa1 * nF - local_multipliers.kappa2 * nA),
                     CellType.FORESTED,
                 )
-                push_event(get_rate_for_event(CellType.PERMANENT_AGRICULTURE.value) * local_multipliers.multiplierLtoA, CellType.PERMANENT_AGRICULTURE)
-                push_event(get_rate_for_event(CellType.BURNED.value) * local_multipliers.multiplierLtoB, CellType.BURNED)
-                push_event(get_rate_for_event(CellType.OTHER_TEMP_DISTURBANCE.value) * local_multipliers.multiplierLtoO, CellType.OTHER_TEMP_DISTURBANCE)
+                push_event(config[CellType.PERMANENT_AGRICULTURE.value][current_year_index] * local_multipliers.multiplierLtoA, CellType.PERMANENT_AGRICULTURE)
+                push_event(config[CellType.BURNED.value][current_year_index] * local_multipliers.multiplierLtoB, CellType.BURNED)
+                push_event(config[CellType.OTHER_TEMP_DISTURBANCE.value][current_year_index] * local_multipliers.multiplierLtoO, CellType.OTHER_TEMP_DISTURBANCE)
 
             elif cell_type == CellType.OTHER_TEMP_DISTURBANCE:
                 push_event(
@@ -134,8 +116,8 @@ def rf_kmc_dynamic_single_event(
                     * (1 + local_multipliers.kappa1 * nF - local_multipliers.kappa2 * nA),
                     CellType.FORESTED,
                 )
-                push_event(get_rate_for_event(CellType.PERMANENT_AGRICULTURE.value) * local_multipliers.multiplierOtoA, CellType.PERMANENT_AGRICULTURE)
-                push_event(get_rate_for_event(CellType.BURNED.value) * local_multipliers.multiplierOtoB, CellType.BURNED)
+                push_event(config[CellType.PERMANENT_AGRICULTURE.value][current_year_index] * local_multipliers.multiplierOtoA, CellType.PERMANENT_AGRICULTURE)
+                push_event(config[CellType.BURNED.value][current_year_index] * local_multipliers.multiplierOtoB, CellType.BURNED)
 
     if total_rate == 0.0:
         return False
@@ -172,10 +154,8 @@ def rf_kmc_dynamic_single_event(
 
     # update other necessary values
     simulation_tracker.currentTime = simulation_tracker.currentTime + dt
-    if event_type == CellType.FORESTED:
-        simulation_tracker.forestPctLeft += cell_pct
-    else:
-        simulation_tracker.forestPctLeft -= cell_pct
+    if event_type == CellType.FORESTED: simulation_tracker.forestPctLeft += cell_pct
+    else: simulation_tracker.forestPctLeft -= cell_pct
     simulation_tracker.currentYear = int(simulation_tracker.startingYear + simulation_tracker.currentTime)
 
     return True

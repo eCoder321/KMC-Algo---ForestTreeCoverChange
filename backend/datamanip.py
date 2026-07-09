@@ -1,16 +1,16 @@
 import pandas as pd
 from pathlib import Path
 from collections import defaultdict
-from data_types import CellType, KMCDynamicRateConfig
+from data_types import CellType, KMCPiecewiseConstsConfig
+from shared import STARTING_YEAR, TRAINING_DATA_CUTOFF
 
 
 indataset = "../data/inputs/consolidated_tree_cover_details_south_amazon.xlsx"
 outdata = "../data/outputs/"
 REGROWTH_YEARS = 19
-STARTING_YEAR = 2000
 
 
-def get_piecewise_constants_per_year() -> KMCDynamicRateConfig:
+def get_piecewise_constants_per_year(training_max_year: int=TRAINING_DATA_CUTOFF) -> KMCPiecewiseConstsConfig:
     """
     returns the piecewise rate constants per year (i.e. the loss_ha/total_remaining_forest_area per event-year)
     
@@ -25,11 +25,11 @@ def get_piecewise_constants_per_year() -> KMCDynamicRateConfig:
     tree_cover_gain_yearly = float(df["tree_cover_gain__ha (2000-2020)"].iloc[0]) / REGROWTH_YEARS #assuming uniform regrowth ha per year
     # print(f"tree cover at risk: {tree_cover_at_risk}")
     aggregated_df = aggregate_tree_cover_loss(df, outdata)
-    # training_df = aggregated_df[aggregated_df['loss_year'] <= 2012]
+    training_df = aggregated_df[aggregated_df['loss_year'] <= training_max_year]
     
     event_rates = defaultdict(list)
     current_year = STARTING_YEAR
-    for row in aggregated_df.itertuples():
+    for row in training_df.itertuples():
         yearly_rate = row.loss_area_ha / tree_cover_at_risk
         event_rates[row.refined_event].append(yearly_rate)
         tree_cover_at_risk -= row.loss_area_ha

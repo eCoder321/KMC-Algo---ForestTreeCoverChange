@@ -1,7 +1,17 @@
+import numpy as np
 from data_types import KMCSimulationTracker, LocalMultipliers
 
 #constant regrowth rate by year
 REGROWTH_RATE = 0.0000685
+
+#dataset starting year and training data cutoff
+STARTING_YEAR = 2001
+TRAINING_DATA_CUTOFF = 2012
+FINAL_FOREST_PCT = 93.8581078
+
+
+
+EPSILON = 1e-12 #epsilon - values too low that it's considered 0
 
 def create_local_multipliers() -> LocalMultipliers:
     return LocalMultipliers(
@@ -20,3 +30,8 @@ def create_local_multipliers() -> LocalMultipliers:
         multiplierOtoA=0.4,
         multiplierOtoB=1
     )
+
+
+def calculate_accuracy(num: float):
+    error_rate = abs(num - FINAL_FOREST_PCT)/FINAL_FOREST_PCT * 100
+    return 100 - error_rate
